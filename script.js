@@ -1,0 +1,697 @@
+/**
+ * Modern Minimal Wedding Invitation - Script
+ */
+
+(function () {
+  'use strict';
+
+  // ── Helpers ──
+  const $ = (sel, ctx = document) => ctx.querySelector(sel);
+  const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+
+  function formatDate(dateStr) {
+    const d = new Date(dateStr);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayName = dayNames[d.getDay()];
+    return { year, month, day, dayName, date: d };
+  }
+
+  function formatTime(timeStr) {
+    const [h, m] = timeStr.split(':').map(Number);
+    const period = h < 12 ? '오전' : '오후';
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${period} ${hour12}시${m > 0 ? ' ' + m + '분' : ''}`;
+  }
+
+  // ── Image Loading (수정됨: 순차 → 병렬 방식) ──
+  function loadImagesFromFolder(folder, maxAttempts = 40) {
+    const checkOne = (i) => new Promise(resolve => {
+      const img = new Image();
+      const path = `images/${folder}/${i}.jpg`;
+      img.onload = () => resolve(path);
+      img.onerror = () => resolve(null);
+      img.src = path;
+    });
+
+    return Promise.all(
+      Array.from({ length: maxAttempts }, (_, i) => checkOne(i + 1))
+    ).then(results => results.filter(Boolean));
+  }
+
+  // ── Toast ──
+  let toastTimer = null;
+  function showToast(message) {
+    let toast = $('.toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    clearTimeout(toastTimer);
+    toast.classList.remove('show');
+    requestAnimationFrame(() => {
+      toast.classList.add('show');
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+    });
+  }
+
+  // ── Copy to clipboard ──
+  async function copyToClipboard(text, successMsg) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(successMsg || '복사되었습니다');
+    } catch {
+      // fallback
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast(successMsg || '복사되었습니다');
+    }
+  }
+
+  // ── Curtain / Intro Overlay ──
+  function initCurtain(c, dateInfo, timeText) {
+    const overlay = $('#curtain-overlay');
+    if (!overlay) return;
+
+    if (!c.useCurtain) {
+      // 커튼 사용하지 않음 - 즉시 제거
+      overlay.remove();
+      return;
+    }
+
+    // 커튼 표시
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // 커튼 내용 채우기
+    const names = $('.curtain-names', overlay);
+    const date = $('.curtain-date', overlay);
+    if (names) names.textContent = `${c.groom.name} & ${c.bride.name}`;
+    if (date) date.textContent = `${dateInfo.year}. ${String(dateInfo.month).padStart(2, '0')}. ${String(dateInfo.day).padStart(2, '0')}`;
+
+// 열기 버튼 (수정본)
+    const btn = $('#curtain-open-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        overlay.classList.add('fade-out');
+        
+        // 🚀 [주소창 프리징 해결 핵심] body뿐만 아니라 html 태그까지 확실하게 스크롤을 열어줍니다.
+        document.body.style.overflow = 'visible';
+        document.documentElement.style.overflow = 'visible'; 
+        
+        overlay.addEventListener('transitionend', () => {
+          overlay.remove();
+          
+          // 🚀 [터치 주도권 강제 회수] 커튼이 완전히 사라진 직후, 브라우저가 본문의 실제 높이를 
+          // 정확하게 인지하여 주소창과 스크롤이 동시에 즉각 반응하도록 이벤트를 한 번 튕겨줍니다.
+          window.dispatchEvent(new Event('resize'));
+        }, { once: true });
+      });
+    }
+  }
+
+// ── Build Page ──
+async function init() {
+  if (typeof CONFIG === 'undefined') return;
+  const c = CONFIG;
+  const dateInfo = formatDate(c.wedding.date);
+  const timeText = formatTime(c.wedding.time);
+
+  // Handle curtain overlay
+  initCurtain(c, dateInfo, timeText);
+
+  // Build non-image sections immediately
+  buildHero(c, dateInfo, timeText);
+  buildInvitation(c, dateInfo, timeText);
+  buildCountdown(c, dateInfo);
+  buildStoryText(c);
+  buildLocation(c);
+  buildAccount(c);
+  
+  initScrollAnimations();
+  initModal();
+
+  // Show loading state for image-dependent sections
+  showLoadingState();
+
+  // Load images asynchronously
+  const [storyImages, galleryImages] = await Promise.all([
+    loadImagesFromFolder('story'),
+    loadImagesFromFolder('gallery')
+  ]);
+
+  // Render image-dependent sections
+  buildStoryImages(storyImages);
+  buildGallery(galleryImages);
+
+  // Remove loading state
+  hideLoadingState();
+
+  // 이미지 로드가 완료된 후 감지기 안전하게 리셋 (중복 누수 방지)
+  initScrollAnimations();
+}
+
+// ── Loading State ──
+function showLoadingState() {
+  const storyImagesEl = $('.story-images');
+  const galleryGrid = $('.gallery-grid');
+  if (storyImagesEl) storyImagesEl.classList.add('loading');
+  if (galleryGrid) galleryGrid.classList.add('loading');
+}
+
+function hideLoadingState() {
+  const storyImagesEl = $('.story-images');
+  const galleryGrid = $('.gallery-grid');
+  if (storyImagesEl) storyImagesEl.classList.remove('loading');
+  if (galleryGrid) galleryGrid.classList.remove('loading');
+}
+
+// ── Hero ──
+function buildHero(c, dateInfo, timeText) {
+  const heroImg = $('.hero-image');
+  if (heroImg) {
+    heroImg.src = 'images/hero/main.png';
+    heroImg.alt = `${c.groom.name} & ${c.bride.name}`;
+  }
+  const heroNames = $('.hero-names');
+  if (heroNames) {
+    heroNames.innerHTML = `${c.groom.name}<span class="ampersand">&</span>${c.bride.name}`;
+  }
+  const heroDate = $('.hero-date');
+  if (heroDate) {
+    heroDate.textContent = `${dateInfo.year}. ${String(dateInfo.month).padStart(2, '0')}. ${String(dateInfo.day).padStart(2, '0')}. ${dateInfo.dayName}요일 ${timeText}`;
+  }
+  const heroVenue = $('.hero-venue');
+  if (heroVenue) {
+    heroVenue.textContent = c.wedding.venue;
+  }
+}
+
+// ── Invitation ──
+function buildInvitation(c, dateInfo, timeText) {
+  const msg = $('.invitation-message');
+  if (msg) {
+    msg.textContent = c.invitation.message;
+  }
+  const parents = $('.invitation-parents');
+  if (parents) {
+    function parentLine(side) {
+      const fatherName = side.father;
+      const motherName = side.mother;
+      const fatherDec = side.fatherDeceased ? ' class="deceased"' : '';
+      const motherDec = side.motherDeceased ? ' class="deceased"' : '';
+      return `<span${fatherDec}>${fatherName}</span> <span class="dot"></span> <span${motherDec}>${motherName}</span><span style="color:#999;margin-left:4px">의</span><span class="child-label">${side === c.groom ? '아들' : '딸'}</span><strong>${side.name}</strong>`;
+    }
+    parents.innerHTML = `
+      <div class="parent-line">${parentLine(c.groom)}</div>
+      <div class="parent-line">${parentLine(c.bride)}</div>
+    `;
+  }
+}
+
+// ── Countdown ──
+function buildCountdown(c, dateInfo) {
+  const [h, m] = c.wedding.time.split(':').map(Number);
+  const weddingDate = new Date(dateInfo.date);
+  weddingDate.setHours(h, m, 0, 0);
+
+  function update() {
+    const now = new Date();
+    const diff = weddingDate - now;
+    const daysEl = $('#cd-days');
+    const hoursEl = $('#cd-hours');
+    const minsEl = $('#cd-mins');
+    const secsEl = $('#cd-secs');
+    const ddayEl = $('.countdown-dday');
+
+    if (diff <= 0) {
+      if (daysEl) daysEl.textContent = '0';
+      if (hoursEl) hoursEl.textContent = '0';
+      if (minsEl) minsEl.textContent = '0';
+      if (secsEl) secsEl.textContent = '0';
+      if (ddayEl) ddayEl.textContent = '결혼식 당일입니다';
+      return;
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+    if (daysEl) daysEl.textContent = days;
+    if (hoursEl) hoursEl.textContent = hours;
+    if (minsEl) minsEl.textContent = mins;
+    if (secsEl) secsEl.textContent = secs;
+    if (ddayEl) {
+      ddayEl.textContent = `결혼식까지 D-${days}`;
+    }
+  }
+
+  update();
+  setInterval(update, 5000); // 카톡 렉 방지를 위해 주기를 5초로 완화
+
+  // Calendar buttons
+  const gcalBtn = $('#btn-gcal');
+  const icalBtn = $('#btn-ical');
+
+  if (gcalBtn) {
+    gcalBtn.addEventListener('click', () => {
+      const start = formatGoogleDate(weddingDate);
+      const end = formatGoogleDate(new Date(weddingDate.getTime() + 2 * 60 * 60 * 1000));
+      const title = encodeURIComponent(`${c.groom.name} ♥ ${c.bride.name} 결혼식`);
+      const location = encodeURIComponent(`${c.wedding.venue} ${c.wedding.address}`);
+      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&location=${location}`;
+      window.open(url, '_blank');
+    });
+  }
+
+  if (icalBtn) {
+    icalBtn.addEventListener('click', () => {
+      const start = formatICSDate(weddingDate);
+      const end = formatICSDate(new Date(weddingDate.getTime() + 2 * 60 * 60 * 1000));
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Wedding//Invitation//KO',
+        'BEGIN:VEVENT',
+        `DTSTART:${start}`,
+        `DTEND:${end}`,
+        `SUMMARY:${c.groom.name} ♥ ${c.bride.name} 결혼식`,
+        `LOCATION:${c.wedding.venue} ${c.wedding.address}`,
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'wedding.ics';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+  }
+}
+
+function formatGoogleDate(d) {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function formatICSDate(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+}
+
+// ── Story (text only) ──
+function buildStoryText(c) {
+  const title = $('#story-title');
+  if (title) title.textContent = c.story.title;
+  const content = $('.story-content');
+  if (content) content.textContent = c.story.content;
+}
+
+// ── Story Images ──
+function buildStoryImages(storyImages) {
+  const container = $('.story-images');
+  if (!container) return;
+  if (storyImages.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.innerHTML = storyImages.map((src, i) => 
+    `<div class="story-image-item">
+       <img src="${src}" alt="Our story ${i + 1}" loading="lazy">
+     </div>`
+  ).join('');
+}
+
+// ── Gallery ──
+let galleryAllImages = [];
+function buildGallery(images) {
+  const grid = $('.gallery-grid');
+  if (!grid) return;
+  galleryAllImages = images;
+
+  if (images.length === 0) {
+    const gallerySection = grid.closest('.gallery');
+    if (gallerySection) gallerySection.style.display = 'none';
+    return;
+  }
+
+  const initialCount = Math.min(12, images.length);
+  function renderImages(count) {
+    grid.innerHTML = images.slice(0, count).map((src, i) => 
+      `<div class="gallery-item" data-index="${i}">
+         <img src="${src}" alt="Gallery photo ${i + 1}" loading="lazy">
+       </div>`
+    ).join('');
+
+    $$('.gallery-item', grid).forEach(item => {
+      item.addEventListener('click', () => {
+        openModal(images, parseInt(item.dataset.index));
+      });
+    });
+  }
+
+  renderImages(Math.min(initialCount, images.length));
+
+  const moreBtn = $('.btn-gallery-more');
+  if (moreBtn) {
+    if (images.length <= initialCount) {
+      moreBtn.parentElement.style.display = 'none';
+    } else {
+      let expanded = false;
+      moreBtn.addEventListener('click', () => {
+        if (!expanded) {
+          renderImages(images.length);
+          moreBtn.textContent = '접기';
+          expanded = true;
+        } else {
+          renderImages(initialCount);
+          moreBtn.textContent = '더보기';
+          expanded = false;
+          grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  }
+}
+
+// ── Photo Modal ──
+let currentModalImages = [];
+let currentModalIndex = 0;
+let touchStartX = 0;
+let touchEndX = 0;
+
+function initModal() {
+  const overlay = $('.modal-overlay');
+  if (!overlay) return;
+
+  const closeBtn = $('.modal-close');
+  const prevBtn = $('.modal-prev');
+  const nextBtn = $('.modal-next');
+  const swipeArea = $('.modal-swipe-area');
+
+  closeBtn?.addEventListener('click', closeModal);
+  prevBtn?.addEventListener('click', () => navigateModal(-1));
+  nextBtn?.addEventListener('click', () => navigateModal(1));
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target === swipeArea) closeModal();
+  });
+
+  swipeArea?.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+
+  swipeArea?.addEventListener('touchend', (e) => {
+    touchEndX = e.changedTouches[0].screenX;
+    const diff = touchStartX - touchEndX;
+    if (Math.abs(diff) > 50) {
+      navigateModal(diff > 0 ? 1 : -1);
+    }
+  }, { passive: true });
+
+  document.addEventListener('keydown', (e) => {
+    if (!overlay.classList.contains('active')) return;
+    if (e.key === 'Escape') closeModal();
+    if (e.key === 'ArrowLeft') navigateModal(-1);
+    if (e.key === 'ArrowRight') navigateModal(1);
+  });
+}
+
+function openModal(images, index) {
+  currentModalImages = images;
+  currentModalIndex = index;
+  const overlay = $('.modal-overlay');
+  if (!overlay) return;
+  updateModalImage();
+  overlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  const overlay = $('.modal-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function navigateModal(dir) {
+  currentModalIndex += dir;
+  if (currentModalIndex < 0) currentModalIndex = currentModalImages.length - 1;
+  if (currentModalIndex >= currentModalImages.length) currentModalIndex = 0;
+  updateModalImage();
+}
+
+function updateModalImage() {
+  const img = $('.modal-image');
+  const counter = $('.modal-counter');
+  if (img) {
+    img.src = currentModalImages[currentModalIndex];
+    img.alt = `Photo ${currentModalIndex + 1}`;
+  }
+  if (counter) {
+    counter.textContent = `${currentModalIndex + 1} / ${currentModalImages.length}`;
+  }
+}
+
+// ── Location ──
+function buildLocation(c) {
+  const venueName = $('.location-venue-name');
+  const venueHall = $('.location-venue-hall');
+  const address = $('.location-address');
+  const tel = $('.location-tel');
+  const mapImg = $('.location-map-image img');
+
+  if (venueName) venueName.textContent = c.wedding.venue;
+  if (venueHall) venueHall.textContent = c.wedding.hall;
+  if (address) address.textContent = c.wedding.address;
+  if (tel && c.wedding.tel) {
+    tel.innerHTML = `<a href="tel:${c.wedding.tel}">${c.wedding.tel}</a>`;
+  }
+  if (mapImg) {
+    mapImg.src = 'images/location/1.JPG';
+    mapImg.alt = `${c.wedding.venue} 약도`;
+  }
+
+  const copyBtn = $('#btn-copy-address');
+  copyBtn?.addEventListener('click', () => {
+    copyToClipboard(c.wedding.address, '주소가 복사되었습니다');
+  });
+
+  const kakaoLink = $('#link-kakao-map');
+  const naverLink = $('#link-naver-map');
+  if (kakaoLink && c.wedding.mapLinks.kakao) {
+    kakaoLink.href = c.wedding.mapLinks.kakao;
+  }
+  if (naverLink && c.wedding.mapLinks.naver) {
+    naverLink.href = c.wedding.mapLinks.naver;
+  }
+}
+
+// ── Account ──
+function buildAccount(c) {
+  buildAccountGroup('groom', c.accounts.groom, `신랑측 계좌번호`);
+  buildAccountGroup('bride', c.accounts.bride, `신부측 계좌번호`);
+}
+
+function buildAccountGroup(side, accounts, label) {
+  const group = $(`#account-${side}`);
+  if (!group) return;
+  const toggle = $('.account-group-toggle', group);
+  const list = $('.account-list', group);
+
+  if (toggle) {
+    const labelEl = toggle.querySelector('.toggle-label');
+    if (labelEl) labelEl.textContent = label;
+    toggle.addEventListener('click', () => {
+      group.classList.toggle('open');
+    });
+  }
+
+  if (list) {
+    list.innerHTML = accounts.map(acc => 
+      `<div class="account-item">
+         <div class="account-info">
+           <div class="account-role">${acc.role}</div>
+           <div class="account-detail">
+             <span class="account-name">${acc.name}</span> ${acc.bank} ${acc.number}
+           </div>
+         </div>
+         <button class="btn-copy-account" data-copy="${acc.bank} ${acc.number} ${acc.name}">복사</button>
+       </div>`
+    ).join('');
+
+    $$('.btn-copy-account', list).forEach(btn => {
+      btn.addEventListener('click', () => {
+        copyToClipboard(btn.dataset.copy, '계좌번호가 복사되었습니다');
+      });
+    });
+  }
+}
+
+// ── Scroll Animations (하단 렉 및 안 뜨는 현상 최종 해결본) ──
+let scrollObserver = null;
+function initScrollAnimations() {
+  if (scrollObserver) {
+    scrollObserver.disconnect();
+  }
+
+  scrollObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      // 🚀 변경 1: 확실하게 화면에 들어왔을 때만 보이기 클래스를 추가합니다.
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      } else {
+        // 🚀 변경 2: 화면 밖으로 완전히 벗어나면 클래스를 떼서, 스크롤을 다시 올렸다 내릴 때도 자연스럽게 작동하게 만듭니다.
+        // unobserve를 제거하여 감지기가 중간에 일방적으로 감시를 포기하는 버그를 원천 차단합니다.
+        entry.target.classList.remove('visible'); 
+      }
+    });
+  }, { 
+    threshold: 0.1, // 🚀 변경 3: 0이 아니라 최소 10% 이상 화면에 들어왔을 때 정식 감지되도록 기준을 눕힙니다.
+    rootMargin: '0px 0px -50px 0px' // 모바일 화면 하단에서 50px 정도 들어왔을 때 자연스럽게 스르륵 켜지도록 마진 조정
+  });
+
+  const targets = document.querySelectorAll('.fade-in');
+  targets.forEach(el => {
+    scrollObserver.observe(el);
+  });
+}
+
+// ── Init ──
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+})();
+
+// ====== BGM 재생 및 토글 기능 ======
+document.addEventListener("DOMContentLoaded", () => {
+  const bgm = document.getElementById("bgm");
+  const openBtn = document.getElementById("curtain-open-btn");
+  const musicToggle = document.getElementById("music-toggle");
+
+  if (openBtn && bgm) {
+    openBtn.addEventListener("click", () => {
+      bgm.play().catch(e => console.log("자동재생 차단됨:", e));
+    });
+  }
+
+  if (musicToggle && bgm) {
+    musicToggle.addEventListener("click", () => {
+      if (bgm.paused) {
+        bgm.play();
+        musicToggle.classList.remove("music-off");
+        musicToggle.classList.add("music-on");
+      } else {
+        bgm.pause();
+        musicToggle.classList.remove("music-on");
+        musicToggle.classList.add("music-off"); // 수정됨: classList.off()는 존재하지 않는 메서드라 음소거 토글이 동작하지 않았음
+      }
+    });
+  }
+});
+
+// iOS Safari 확대 제한
+document.documentElement.addEventListener('touchstart', function (event) {
+  if (event.touches.length > 1) {
+    event.preventDefault();
+  }
+}, { passive: true }); // 🚀 false에서 true로 변경하여 브라우저의 스크롤 대기 시간을 없앱니다.
+
+let lastTouchEnd = 0;
+document.documentElement.addEventListener('touchend', function (event) {
+  const now = (new Date()).getTime();
+  if (now - lastTouchEnd <= 300) {
+    // 더블탭 확대만 가볍게 제어
+  }
+  lastTouchEnd = now;
+}, { passive: true });
+
+// ====== 벚꽃 추가 기능 (카카오톡 스크롤 최적화 최종본) ======
+function createPetalsLocal() {
+  const container = document.querySelector('.cherry-blossom-local-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const petalCount = 8;
+  for (let i = 0; i < petalCount; i++) {
+    const petal = document.createElement('div');
+    petal.classList.add('petal');
+    const size = Math.random() * 6 + 4;
+    petal.style.width = `${size}px`;
+    petal.style.height = `${size}px`;
+    petal.style.top = `${Math.random() * 100}%`;
+    petal.style.left = `${Math.random() * 100}%`;
+    petal.style.animationDuration = `${Math.random() * 3 + 3}s`;
+    container.appendChild(petal);
+
+    petal.addEventListener('animationiteration', () => {
+      petal.style.left = `${Math.random() * 100}%`;
+    });
+  }
+}
+
+window.addEventListener('load', () => {
+  setTimeout(createPetalsLocal, 1500);
+});
+
+document.addEventListener('touchstart', function firstTouchPlayBgm() {
+  const bgm = document.getElementById('bgm');
+  if (bgm && bgm.paused) {
+    bgm.play().catch(e => console.log('재생 실패:', e));
+  }
+  document.removeEventListener('touchstart', firstTouchPlayBgm);
+}, { once: true, passive: true });
+
+// ====== 글씨 크게 보기 토글 ======
+document.addEventListener('DOMContentLoaded', () => {
+  const fontToggle = document.getElementById('font-toggle');
+  if (fontToggle) {
+    fontToggle.addEventListener('click', () => {
+      document.body.classList.toggle('font-large');
+      fontToggle.textContent = document.body.classList.contains('font-large') ? '작은글씨' : '큰글씨';
+    });
+  }
+});
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  const wechatBtn = document.getElementById('wechat-share-btn');
+  const qrModal = document.getElementById('wechat-qr-modal');
+  const qrImg = document.getElementById('wechat-qr-img');
+  const qrClose = document.getElementById('wechat-qr-close');
+  const shareUrl = 'https://debbieeelee.github.io/invitation/?v=3';
+  const shareTitle = '이선우 💙 이동훈 결혼합니다';
+  const shareImageUrl = 'https://debbieeelee.github.io/invitation/images/og/2.jpg';
+
+  let cachedFile = null;
+  fetch(shareImageUrl).then(r => r.blob())
+    .then(b => cachedFile = new File([b], 'invitation.jpg', { type: b.type }))
+    .catch(() => {});
+
+  wechatBtn?.addEventListener('click', async () => {
+    try {
+      if (cachedFile && navigator.canShare?.({ files: [cachedFile] })) {
+        await navigator.share({ files: [cachedFile], title: shareTitle, text: `${shareTitle}\n${shareUrl}` });
+        return;
+      }
+      if (navigator.share) { await navigator.share({ title: shareTitle, url: shareUrl }); return; }
+    } catch (e) {}
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(shareUrl)}`;
+    qrModal.style.display = 'flex';
+  });
+
+  qrClose?.addEventListener('click', () => qrModal.style.display = 'none');
+  qrModal?.addEventListener('click', (e) => { if (e.target === qrModal) qrModal.style.display = 'none'; });
+});
