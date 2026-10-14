@@ -499,8 +499,9 @@ function buildLocation(c) {
 
 // ── Account ──
 function buildAccount(c) {
-  buildAccountGroup('groom', c.accounts.groom, `신랑측 계좌번호`);
-  buildAccountGroup('bride', c.accounts.bride, `신부측 계좌번호`);
+  if (!c.accounts) return;
+  buildAccountGroup('groom', c.accounts.groom || [], `신랑측 계좌번호`);
+  buildAccountGroup('bride', c.accounts.bride || [], `신부측 계좌번호`);
 }
 
 function buildAccountGroup(side, accounts, label) {
