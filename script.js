@@ -672,9 +672,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const qrModal = document.getElementById('wechat-qr-modal');
   const qrImg = document.getElementById('wechat-qr-img');
   const qrClose = document.getElementById('wechat-qr-close');
-  const shareUrl = 'https://debbieeelee.github.io/invitation/?v=3';
-  const shareTitle = '이선우 💙 이동훈 결혼합니다';
-  const shareImageUrl = 'https://debbieeelee.github.io/invitation/images/og/2.jpg';
+const shareUrl = 'https://debbieeelee.github.io/invitation-cn/?v=2';
+const shareTitle = '李東勳 💙 李宣雨 要结婚了';
+const shareImageUrl = 'https://debbieeelee.github.io/invitation-cn/images/og/2.jpg';
 
   let cachedFile = null;
   fetch(shareImageUrl).then(r => r.blob())
