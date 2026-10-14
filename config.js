@@ -20,7 +20,7 @@ const CONFIG = {
 
   // ── 메인 (히어로) ──
   groom: {
-    name: "이동훈",
+    name: "李東勳",
     nameEn: "Donghun",
     father: "이상현",
     mother: "최순덕",
@@ -29,7 +29,7 @@ const CONFIG = {
   },
 
   bride: {
-    name: "이선우",
+    name: "李宣雨",
     nameEn: "Debbie",
     father: "이문규",
     mother: "손주희",
@@ -53,8 +53,13 @@ const CONFIG = {
   // ── 인사말 ──
   invitation: {
     title: "저희의 결혼식에 초대합니다. !!!!",
-    message: "我们从彼此最亲密的同行者开始，\n如今成为了携手余生的终身伴侣。\n\n如果能得到您的祝福，\n见证我们的第一步，\n将是我们莫大的荣幸与喜悦。"
-  },
+message: `我们从彼此最亲密的同行者开始，
+如今成为了携手余生的终身伴侣。
+
+如果能得到您的祝福，
+见证我们的第一步，
+将是我们莫大的荣幸与喜悦。`
+},
 
   // ── 우리의 이야기 ──
   story: {
