@@ -65,7 +65,8 @@ const CONFIG = {
   // (mapLinks는 wedding 객체 내에 포함)
 
   // ── 마음 전하실 곳 ──
-  accounts: {
+  /*
+   accounts: {
     groom: [
       { role: "신랑", name: "이동훈", bank: "국민은행", number: "756402-01-186886" },
       { role: "아버지", name: "이상현", bank: "농협은행", number: "352-2299-0454-73" },
@@ -76,7 +77,7 @@ const CONFIG = {
       { role: "아버지", name: "이문규", bank: "신한은행", number: "371-02-31559-7" },
       { role: "어머니", name: "손주희", bank: "신한은행", number: "330-02-62665-4" }
     ]
-  },
+  }, */
 
   // ── 링크 공유 시 나타나는 문구 ──
   kakaoShare: {
