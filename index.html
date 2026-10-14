@@ -296,7 +296,7 @@
 <script src="script.js?v=2"></script>
   
   <script>
-  document.getElementById('kakao-share-btn').addEventListener('click', function () {
+  document.getElementById('kakao-share-btn')?.addEventListener('click', function () {
     Kakao.Share.sendDefault({
       objectType: 'feed',
       content: {
