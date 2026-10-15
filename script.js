@@ -371,11 +371,11 @@ function buildGallery(images) {
       moreBtn.addEventListener('click', () => {
         if (!expanded) {
           renderImages(images.length);
-          moreBtn.textContent = '접기';
+          moreBtn.textContent = '收起';
           expanded = true;
         } else {
           renderImages(initialCount);
-          moreBtn.textContent = '더보기';
+          moreBtn.textContent = '展开';
           expanded = false;
           grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
