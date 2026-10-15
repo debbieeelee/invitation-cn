@@ -22,8 +22,8 @@ const CONFIG = {
   groom: {
     name: "李東勳",
     nameEn: "Donghun",
-    father: "이상현",
-    mother: "최순덕",
+    father: "李相弦",
+    mother: "崔順德",
     fatherDeceased: false,
     motherDeceased: false
   },
@@ -31,8 +31,8 @@ const CONFIG = {
   bride: {
     name: "李宣雨",
     nameEn: "Debbie",
-    father: "이문규",
-    mother: "손주희",
+    father: "李文奎",
+    mother: "孙周希",
     fatherDeceased: false,
     motherDeceased: false
   },
